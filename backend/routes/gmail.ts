@@ -151,7 +151,7 @@ const callbackHandler = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-router.get("/auth/callback", callbackHandler);
+router.get(["/auth/callback", "/api/auth/callback"], callbackHandler);
 
 // POST /api/auth/store-token
 router.post("/auth/store-token", (req: Request, res: Response): void => {

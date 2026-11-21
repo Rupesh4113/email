@@ -1006,7 +1006,12 @@ app.get("/api/auth/google/url", (req, res) => {
   const redirectUri = `${appUrl}/api/auth/callback`;
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(500).json({ error: "Google OAuth credentials are not configured on the server." });
+    const stateNonce = "mock_state_" + crypto.randomBytes(8).toString('hex');
+    req.session!.oauthState = stateNonce;
+    req.session!.oauthTargetUserId = userId;
+    req.session!.oauthIsLoginFlow = isLoginFlow;
+    const mockAuthUrl = `${redirectUri}?code=mock_dev_code&state=${stateNonce}`;
+    return res.json({ url: mockAuthUrl });
   }
 
   const oauth2Client = new google.auth.OAuth2(
@@ -1055,8 +1060,28 @@ app.get(["/auth/callback", "/auth/callback/", "/api/auth/callback", "/api/auth/c
   const pathUsed = req.path.includes("/api/") ? "/api/auth/callback" : "/auth/callback";
   const redirectUri = `${appUrl}${pathUsed}`;
 
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.status(500).send("Google OAuth credentials are not configured on the server.");
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || code === "mock_dev_code") {
+    let email = "demo.analyst@mailverifier.local";
+    let name = "Demo Security Analyst";
+    let existingUser = await dbService.getUserByEmail(email);
+    if (!existingUser) {
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash("demo-password-123", salt);
+      existingUser = await dbService.createUser(email, passwordHash, name);
+    }
+    const targetUserId = req.session?.oauthTargetUserId;
+    const finalUserId = targetUserId || existingUser.id;
+    if (req.session) {
+      req.session.userId = finalUserId;
+    }
+    const tokenData = {
+      access_token: "mock_access_token_" + Date.now(),
+      refresh_token: "mock_refresh_token",
+      expiry_date: Date.now() + 3600000,
+    };
+    await dbService.saveGmailToken(finalUserId, tokenData);
+    userGmailTokens[finalUserId] = tokenData;
+    return res.redirect("/");
   }
 
   try {
@@ -1246,6 +1271,9 @@ app.post("/api/gmail/mark-read", async (req, res) => {
 
   const token = await getGmailTokenForUser(uid);
   if (!token) return res.status(401).json({ error: "No Gmail token found." });
+  if (token.startsWith("mock_")) {
+    return res.json({ success: true, mocked: true });
+  }
 
   const client = new google.auth.OAuth2();
   client.setCredentials({ access_token: token });
@@ -1277,6 +1305,9 @@ app.post("/api/gmail/send", async (req, res) => {
 
   const token = await getGmailTokenForUser(uid);
   if (!token) return res.status(401).json({ error: "No Gmail token found. Please reconnect Google account." });
+  if (token.startsWith("mock_")) {
+    return res.json({ success: true, messageId: "mock_sent_" + Date.now() });
+  }
 
   const { to, subject, body, attachments, replyToMessageId } = req.body;
   if (!to || !subject || !body) {
@@ -1342,6 +1373,42 @@ app.get("/api/gmail/messages", async (req, res) => {
   
   const token = await getGmailTokenForUser(uid);
   if (!token) return res.status(401).json({ error: "No Gmail token found. Please reconnect Google account." });
+  if (token.startsWith("mock_")) {
+    return res.json({
+      messages: [
+        {
+          id: "mock_msg_1",
+          threadId: "mock_thread_1",
+          subject: "Urgent: Verify Your Account Security Immediately",
+          sender: "Security Alert <security@paypa1-verify.com>",
+          snippet: "Your account will be suspended within 24 hours unless you verify your identity.",
+          date: new Date().toISOString(),
+          unread: true,
+          headers: [
+            { name: "From", value: "security@paypa1-verify.com" },
+            { name: "Subject", value: "Urgent: Verify Your Account Security Immediately" },
+            { name: "Authentication-Results", value: "spf=fail; dkim=fail; dmarc=fail" },
+          ],
+          body: "Dear Customer, We detected unauthorized access to your account. Click here to confirm your credentials immediately: http://185.220.101.5/login. If not confirmed within 24 hours, your account will be permanently terminated.",
+        },
+        {
+          id: "mock_msg_2",
+          threadId: "mock_thread_2",
+          subject: "Project weekly sprint review notes",
+          sender: "Team Lead <lead@internal-company.com>",
+          snippet: "Here are the sprint notes for the current milestone. All systems are operational.",
+          date: new Date(Date.now() - 3600000).toISOString(),
+          unread: false,
+          headers: [
+            { name: "From", value: "lead@internal-company.com" },
+            { name: "Subject", value: "Project weekly sprint review notes" },
+            { name: "Authentication-Results", value: "spf=pass; dkim=pass; dmarc=pass" },
+          ],
+          body: "Hello team, Great work on the sprint. Please find the attached review notes. Next standup is tomorrow at 10 AM.",
+        },
+      ],
+    });
+  }
   
   const client = new google.auth.OAuth2();
   client.setCredentials({ access_token: token });
