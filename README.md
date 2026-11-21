@@ -109,6 +109,33 @@ cp .env.example .env
   npm start
   ```
 
+- **Run Streamlit Edition Locally:**
+  ```bash
+  streamlit run streamlit_app.py
+  # or
+  npm run streamlit
+  ```
+
+---
+
+## ☁️ Deploying to Streamlit Community Cloud
+
+The repository is pre-configured with `streamlit_app.py`, `requirements.txt`, and `.streamlit/config.toml` for 1-click zero-config deployment to **Streamlit Community Cloud**:
+
+1. Push your repository to GitHub:
+   ```bash
+   git add .
+   git commit -m "Add Streamlit Community Cloud deployment support"
+   git push origin main
+   ```
+2. Navigate to [share.streamlit.io](https://share.streamlit.io/).
+3. Click **"New app"**.
+4. Select your GitHub repository (`<username>/email`), branch (`main`), and set the main file path to:
+   ```
+   streamlit_app.py
+   ```
+5. Click **"Deploy"**! Streamlit will automatically install dependencies from `requirements.txt` and launch your live cyber threat verifier.
+
 ---
 
 ## 📡 Core API Endpoints
