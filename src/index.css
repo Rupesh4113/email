@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-navy: #0B1F3A;
+  --color-orange: #FF6B00;
+  --color-navy-light: #1A2E4A;
+  --color-navy-dark: #051224;
+}
+
+/* Base Markdown Styles */
+.markdown-container h3 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+  color: var(--color-navy);
+  font-style: italic;
+  font-size: 1.25rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.markdown-container h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-container h3::before {
+  content: "";
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/200-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>');
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.markdown-container h3:nth-of-type(1)::before { /* Email Classification */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>');
+}
+.markdown-container h3:nth-of-type(2)::before { /* Risk Score */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>');
+}
+.markdown-container h3:nth-of-type(3)::before { /* Key Findings */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>');
+}
+.markdown-container h3:nth-of-type(4)::before { /* Threat Analysis */
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23FF6B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>');
+}
+
+.markdown-container h4 {
+  font-family: var(--font-sans);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(11, 31, 58, 0.6);
+  font-size: 0.875rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.markdown-container h4::before {
+  content: "";
+  width: 1rem;
+  height: 2px;
+  background-color: var(--color-orange);
+  display: inline-block;
+}
+
+.markdown-container p {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.625;
+  margin-bottom: 1rem;
+  font-weight: 500;
+  color: rgba(11, 31, 58, 0.8);
+}
+
+.markdown-container ul {
+  list-style-type: none;
+  padding: 0;
+  margin-bottom: 1.5rem;
+}
+
+.markdown-container li {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  display: flex;
+  gap: 0.75rem;
+  color: rgba(11, 31, 58, 0.7);
+  margin-bottom: 0.75rem;
+  line-height: 1.625;
+  font-weight: 500;
+}
+
+.markdown-container li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background-color: var(--color-orange);
+  border-radius: 9999px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.markdown-container strong {
+  font-weight: 900;
+  color: var(--color-navy);
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Mail Verifier",
+  "description": "Real-time email security assistant for phishing detection and risk analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
