@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 import cookieSession from "cookie-session";
 import bcrypt from "bcryptjs";
 import { dbService, SUPER_ADMIN_EMAIL, ReportAppeal } from "./db.js";
+import { runForensicAnalysis, runInboxScan, runRealtimeAlert } from "../backend/engine/forensic-engine.js";
+import { answerEmailChatQuery } from "../backend/ai/ollama-provider.js";
 
 function isAdminUser(user: any): boolean {
   return Boolean(
@@ -1730,7 +1732,13 @@ async function generateWithFallback(
 
 async function analyzeEmailHelper(data: any, mode: string, uid: string) {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured on the server. Please set it in your environment secrets.");
+    if (mode === "INBOX_SCAN") {
+      return runInboxScan(Array.isArray(data) ? data : [data]);
+    }
+    if (mode === "REALTIME_ALERT") {
+      return runRealtimeAlert(Array.isArray(data) ? data[0] : data);
+    }
+    return runForensicAnalysis(Array.isArray(data) ? data[0] : data);
   }
 
   if (mode === "INBOX_SCAN") {
@@ -2074,7 +2082,8 @@ NEW USER QUESTION: ${question}
 
   try {
     if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured on the server.");
+      const responseText = await answerEmailChatQuery(messageContext, history || [], question);
+      return res.json({ text: responseText });
     }
     const responseText = await generateWithFallback(prompt, {
       systemInstruction: "You are the Mail Verifier AI Q&A Assistant. You answer questions strictly, safely, and factually regarding the selected email.",

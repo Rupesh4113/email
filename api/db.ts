@@ -3,6 +3,7 @@ import { initializeApp, applicationDefault, getApps, cert } from 'firebase-admin
 import { getFirestore } from 'firebase-admin/firestore';
 import fs from "fs";
 import path from "path";
+import { sqliteDb } from "../backend/db/sqlite.js";
 
 // Load config
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
@@ -192,170 +193,58 @@ function handleDbFallback(operation: string, error: Error) {
 
 const localDb = {
   getUserByEmail(email: string): User | null {
-    const data = readLocalDb();
-    const normalized = email.toLowerCase().trim();
-    for (const id in data.users) {
-      if (data.users[id].email === normalized) {
-        return normalizeUserRoles(data.users[id]);
-      }
-    }
-    return null;
+    return sqliteDb.getUserByEmail(email);
   },
-
   getUserById(id: string): User | null {
-    const data = readLocalDb();
-    return data.users[id] ? normalizeUserRoles(data.users[id]) : null;
+    return sqliteDb.getUserById(id);
   },
-
   createUser(email: string, passwordHash: string, name: string): User {
-    const data = readLocalDb();
-    const id = "usr_" + Math.random().toString(36).substring(2, 11);
-    const normalizedEmail = email.toLowerCase().trim();
-    const isSuper = normalizedEmail === SUPER_ADMIN_EMAIL;
-    const isInvitedAdmin = Boolean(data.adminInvites && data.adminInvites[normalizedEmail]);
-    const newUser: User = {
-      id,
-      email: normalizedEmail,
-      passwordHash,
-      name: name.trim(),
-      subscription: {
-        plan: "free",
-        usage: 0,
-        paymentMethod: "None",
-        currentPeriodEnd: null,
-        trialStartDate: new Date().toISOString(),
-        invoices: []
-      },
-      createdAt: new Date().toISOString(),
-      isAdmin: isSuper || isInvitedAdmin,
-      isSuperAdmin: isSuper,
-      isVerified: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null
-    };
-    data.users[id] = newUser;
-    if (isInvitedAdmin && data.adminInvites) {
-      delete data.adminInvites[normalizedEmail];
-    }
-    writeLocalDb(data);
-    return newUser;
+    return sqliteDb.createUser(email, passwordHash, name);
   },
-
   updateUser(id: string, updates: Partial<User>): User | null {
-    const data = readLocalDb();
-    if (!data.users[id]) return null;
-    data.users[id] = {
-      ...data.users[id],
-      ...updates
-    };
-    writeLocalDb(data);
-    return data.users[id];
+    return sqliteDb.updateUser(id, updates);
   },
   updateUserSubscription(id: string, subscription: Partial<Subscription>): User | null {
-    const data = readLocalDb();
-    if (!data.users[id]) return null;
-    data.users[id].subscription = {
-      ...data.users[id].subscription,
-      ...subscription
-    };
-    writeLocalDb(data);
-    return data.users[id];
+    return sqliteDb.updateUserSubscription(id, subscription);
   },
-
   saveGmailToken(id: string, tokenData: { access_token: string, refresh_token?: string | null, expiry_date?: number | null }) {
-    const data = readLocalDb();
-    if (!data.tokens) data.tokens = {};
-    const existing = data.tokens[id] || {};
-    data.tokens[id] = {
-      ...existing,
-      ...tokenData,
-    };
-    writeLocalDb(data);
+    sqliteDb.saveGmailToken(id, tokenData);
   },
-
   getGmailToken(id: string): any | null {
-    const data = readLocalDb();
-    if (!data.tokens) return null;
-    return data.tokens[id] || null;
+    return sqliteDb.getGmailToken(id);
   },
-
   getAllUsers(): User[] {
-    const data = readLocalDb();
-    return Object.values(data.users);
+    return sqliteDb.getAllUsers();
   },
-
   deleteUser(id: string): boolean {
-    const data = readLocalDb();
-    if (!data.users[id]) return false;
-    delete data.users[id];
-    if (data.tokens && data.tokens[id]) {
-      delete data.tokens[id];
-    }
-    writeLocalDb(data);
-    return true;
+    return sqliteDb.deleteUser(id);
   },
-
   getReportById(id: string): CommunityReport | null {
-    const data = readLocalDb();
-    if (!data.reports) return null;
-    return data.reports[id] || null;
+    return sqliteDb.getReportById(id);
   },
-
   createReport(report: CommunityReport): CommunityReport {
-    const data = readLocalDb();
-    if (!data.reports) data.reports = {};
-    data.reports[report.id] = report;
-    writeLocalDb(data);
-    return report;
+    return sqliteDb.createReport(report);
   },
-
   getAllReports(): CommunityReport[] {
-    const data = readLocalDb();
-    if (!data.reports) return [];
-    return Object.values(data.reports);
+    return sqliteDb.getAllReports();
   },
-
+  getPublicReports(searchQuery?: string, category?: string): CommunityReport[] {
+    return sqliteDb.getPublicReports(searchQuery, category);
+  },
   updateReport(id: string, updates: Partial<CommunityReport>): CommunityReport | null {
-    const data = readLocalDb();
-    if (!data.reports || !data.reports[id]) return null;
-    data.reports[id] = {
-      ...data.reports[id],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    writeLocalDb(data);
-    return data.reports[id];
+    return sqliteDb.updateReport(id, updates);
   },
-
   deleteReport(id: string): boolean {
-    const data = readLocalDb();
-    if (!data.reports || !data.reports[id]) return false;
-    delete data.reports[id];
-    writeLocalDb(data);
-    return true;
+    return sqliteDb.deleteReport(id);
   },
-
   getAdminInvites(): AdminInvite[] {
-    const data = readLocalDb();
-    if (!data.adminInvites) return [];
-    return Object.values(data.adminInvites);
+    return sqliteDb.getAdminInvites();
   },
-
   addAdminInvite(invite: AdminInvite): AdminInvite {
-    const data = readLocalDb();
-    if (!data.adminInvites) data.adminInvites = {};
-    data.adminInvites[invite.email.toLowerCase().trim()] = invite;
-    writeLocalDb(data);
-    return invite;
+    return sqliteDb.addAdminInvite(invite.email, invite.addedBy);
   },
-
   removeAdminInvite(email: string): boolean {
-    const data = readLocalDb();
-    const norm = email.toLowerCase().trim();
-    if (!data.adminInvites || !data.adminInvites[norm]) return false;
-    delete data.adminInvites[norm];
-    writeLocalDb(data);
-    return true;
+    return sqliteDb.removeAdminInvite(email);
   }
 };
 
