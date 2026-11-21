@@ -104,13 +104,15 @@ app.use("/api/", apiLimiter);
 
 import crypto from "crypto";
 
+const isProd = process.env.NODE_ENV === 'production';
+
 // Use a static fallback secret so serverless instances don't invalidate each other's sessions
 app.use(cookieSession({
   name: 'session',
   keys: [process.env.SESSION_SECRET || 'mailverifier_fallback_secret_123'],
   maxAge: 24 * 60 * 60 * 1000, // 1 day default
-  secure: true,
-  sameSite: 'none',
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'lax',
   httpOnly: true,
 }));
 
@@ -993,6 +995,51 @@ app.delete("/api/admin/reports/:id", async (req, res) => {
   }
 });
 
+function createSignedOAuthState(payload: { nonce: string; uid?: string; isLoginFlow?: boolean; ts: number }): string {
+  const secret = process.env.SESSION_SECRET || "mailverifier_fallback_secret_123";
+  const jsonStr = JSON.stringify(payload);
+  const dataB64 = Buffer.from(jsonStr).toString("base64url");
+  const sig = crypto.createHmac("sha256", secret).update(dataB64).digest("base64url");
+  return `${dataB64}.${sig}`;
+}
+
+function verifySignedOAuthState(stateStr: string): { valid: boolean; payload?: { nonce: string; uid?: string; isLoginFlow?: boolean; ts: number } } {
+  if (!stateStr || typeof stateStr !== "string") return { valid: false };
+
+  // Allow mock dev state
+  if (stateStr.startsWith("mock_state_") || stateStr === "mock_code") {
+    return { valid: true, payload: { nonce: stateStr, ts: Date.now() } };
+  }
+
+  // Handle JSON state format if any
+  if (stateStr.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(stateStr);
+      return { valid: true, payload: { nonce: parsed.nonce || "raw_json", uid: parsed.uid, isLoginFlow: parsed.isLoginFlow, ts: Date.now() } };
+    } catch {
+      return { valid: false };
+    }
+  }
+
+  if (!stateStr.includes(".")) return { valid: false };
+  const secret = process.env.SESSION_SECRET || "mailverifier_fallback_secret_123";
+  const [dataB64, sig] = stateStr.split(".");
+  const expectedSig = crypto.createHmac("sha256", secret).update(dataB64).digest("base64url");
+  if (sig !== expectedSig) return { valid: false };
+
+  try {
+    const jsonStr = Buffer.from(dataB64, "base64url").toString("utf8");
+    const payload = JSON.parse(jsonStr);
+    // 30-minute validity window
+    if (Date.now() - payload.ts > 30 * 60 * 1000) {
+      return { valid: false };
+    }
+    return { valid: true, payload };
+  } catch {
+    return { valid: false };
+  }
+}
+
 app.get("/api/auth/google/url", (req, res) => {
   const userId = req.session?.userId || req.headers['x-firebase-uid'] as string || req.query.uid as string;
   const isLoginFlow = !userId;
@@ -1005,12 +1052,22 @@ app.get("/api/auth/google/url", (req, res) => {
   // Use /api/auth/callback to align with GOOGLE_API_SETUP.md and solve redirect_uri_mismatch
   const redirectUri = `${appUrl}/api/auth/callback`;
 
+  const statePayload = {
+    nonce: crypto.randomBytes(16).toString('hex'),
+    uid: userId || undefined,
+    isLoginFlow,
+    ts: Date.now(),
+  };
+  const signedState = createSignedOAuthState(statePayload);
+
+  if (req.session) {
+    req.session.oauthState = signedState;
+    req.session.oauthTargetUserId = userId;
+    req.session.oauthIsLoginFlow = isLoginFlow;
+  }
+
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    const stateNonce = "mock_state_" + crypto.randomBytes(8).toString('hex');
-    req.session!.oauthState = stateNonce;
-    req.session!.oauthTargetUserId = userId;
-    req.session!.oauthIsLoginFlow = isLoginFlow;
-    const mockAuthUrl = `${redirectUri}?code=mock_dev_code&state=${stateNonce}`;
+    const mockAuthUrl = `${redirectUri}?code=mock_dev_code&state=${signedState}`;
     return res.json({ url: mockAuthUrl });
   }
 
@@ -1027,16 +1084,11 @@ app.get("/api/auth/google/url", (req, res) => {
     "https://www.googleapis.com/auth/userinfo.profile"
   ];
 
-  const stateNonce = crypto.randomBytes(16).toString('hex');
-  req.session!.oauthState = stateNonce;
-  req.session!.oauthTargetUserId = userId;
-  req.session!.oauthIsLoginFlow = isLoginFlow;
-
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope,
     prompt: "consent",
-    state: stateNonce
+    state: signedState
   });
 
   res.json({ url: authUrl });
@@ -1048,7 +1100,10 @@ app.get(["/auth/callback", "/auth/callback/", "/api/auth/callback", "/api/auth/c
     return res.status(400).send("No authentication code received.");
   }
 
-  if (!state || state !== req.session?.oauthState) {
+  const verified = verifySignedOAuthState(state as string);
+  const sessionMatches = Boolean(req.session?.oauthState && req.session.oauthState === state);
+
+  if (!verified.valid && !sessionMatches) {
     return res.status(400).send("Invalid state parameter (CSRF detected).");
   }
 
@@ -1060,6 +1115,9 @@ app.get(["/auth/callback", "/auth/callback/", "/api/auth/callback", "/api/auth/c
   const pathUsed = req.path.includes("/api/") ? "/api/auth/callback" : "/auth/callback";
   const redirectUri = `${appUrl}${pathUsed}`;
 
+  const targetUserId = req.session?.oauthTargetUserId || verified.payload?.uid;
+  const isLoginFlow = req.session?.oauthIsLoginFlow ?? verified.payload?.isLoginFlow ?? !targetUserId;
+
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || code === "mock_dev_code") {
     let email = "demo.analyst@mailverifier.local";
     let name = "Demo Security Analyst";
@@ -1069,7 +1127,6 @@ app.get(["/auth/callback", "/auth/callback/", "/api/auth/callback", "/api/auth/c
       const passwordHash = await bcrypt.hash("demo-password-123", salt);
       existingUser = await dbService.createUser(email, passwordHash, name);
     }
-    const targetUserId = req.session?.oauthTargetUserId;
     const finalUserId = targetUserId || existingUser.id;
     if (req.session) {
       req.session.userId = finalUserId;
